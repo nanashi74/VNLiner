@@ -13,10 +13,6 @@ func main() {
 		DB:       0,
 	})
 
-	_, err := client.Ping().Result()
-	if err != nil {
-		log.Fatalf("Could not ping the redis client: %v", err)
-	}
 	defer client.Close()
 
 	prevText := ""
