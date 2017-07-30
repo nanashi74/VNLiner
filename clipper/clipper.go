@@ -2,18 +2,11 @@ package main
 
 import "log"
 import "time"
+import "net"
+
 import "github.com/atotto/clipboard"
-import "github.com/go-redis/redis"
 
 func main() {
-
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	defer client.Close()
 
 	prevText := ""
 	for {
@@ -26,10 +19,14 @@ func main() {
 
 		if text != prevText {
 			prevText = text
-			err = client.Publish("vnlines", text).Err()
+
+			conn, err := net.Dial("tcp", "localhost:8081")
 			if err != nil {
-				log.Printf("Error publishing to redis")
+				log.Printf("Error connecting: %v", err)
 			}
+
+			conn.Write([]byte(text))
+			conn.Close()
 		}
 	}
 }

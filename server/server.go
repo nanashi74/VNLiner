@@ -2,26 +2,20 @@ package main
 
 import "fmt"
 import "log"
+import "net"
 import "net/http"
+import "bufio"
+import "io/ioutil"
 
-import "github.com/go-redis/redis"
 import "github.com/desertbit/glue"
 
 func main() {
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	_, err := client.Ping().Result()
+	inputSocket, err := net.Listen("tcp", ":8081")
 	if err != nil {
-		log.Fatalf("Could not ping the redis server.")
+		log.Fatal(err)
 	}
-
-	pubsub := client.Subscribe("vnlines")
-	defer pubsub.Close()
+	defer inputSocket.Close()
 
 	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("public"))))
 	http.Handle("/dist/", http.StripPrefix("/dist/", http.FileServer(http.Dir("dist"))))
@@ -33,12 +27,15 @@ func main() {
 
 	server.OnNewSocket(onNewSocket)
 
-	msgs := pubsub.Channel()
-	go handleMessages(msgs, server)
+	go server.Run()
 
-	err = server.Run()
-	if err != nil {
-		log.Fatalf("Glue Run: %v", err)
+	for {
+		conn, err := inputSocket.Accept()
+		if err != nil {
+			log.Printf("Connection Error: %v", err)
+		}
+
+		go handleMessages(&conn, server)
 	}
 
 }
@@ -55,13 +52,17 @@ func onNewSocket(s *glue.Socket) {
 	log.Printf("Socket connected: %s", s.RemoteAddr())
 }
 
-func handleMessages(msgs <-chan *redis.Message, server *glue.Server) {
-	for msg := range msgs {
-		sockets := server.Sockets()
-		for _, socket := range sockets {
-			if socket.IsInitialized() {
-				socket.Write(msg.Payload)
-			}
+func handleMessages(conn *net.Conn, server *glue.Server) {
+
+	conts, err := ioutil.ReadAll(bufio.NewReader(*conn))
+	if err != nil {
+		log.Printf("Read Error: %v", err)
+	}
+
+	sockets := server.Sockets()
+	for _, socket := range sockets {
+		if socket.IsInitialized() {
+			socket.Write(string(conts))
 		}
 	}
 }
